@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CreditMeter</RootNamespace>
+
+    <!-- Keep it tiny and fast -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseWindowsForms>false</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- No console window for a tray app -->
+    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Icon resource embedded into the exe (add your own .ico later) -->
+    <!-- <Win32Resource>app.res</Win32Resource> -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DPAPI (ProtectedData.Protect/Unprotect) lives outside the base framework on .NET Core+ -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

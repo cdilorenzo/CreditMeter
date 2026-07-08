@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+
+# Local settings / secrets (real location is %APPDATA%\CreditMeter\, never in-repo)
+settings.json
+*.log
+
+# Screenshots/recordings that may contain tokens or private data
+*.secret.png
+*.secret.gif
