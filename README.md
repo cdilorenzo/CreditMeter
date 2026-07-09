@@ -19,11 +19,42 @@ It shows:
 - AI credits used, for example `427 AI credits burned`
 - optional local monthly credit limit/progress
 - a tiny taxi-meter style popup on tray left-click
+- a tray icon that is itself color-coded (green/amber/red) by usage against
+  your optional local limit, with a small "!" badge if the API call fails
 - a tray tooltip with the current usage
 - a manual **Retry now** action from the tray menu
 
 The goal is not to be a full GitHub billing dashboard. CreditMeter is a small,
 fun, local utility that makes AI-credit burn visible.
+
+## Supported accounts (personal Copilot billing only)
+
+CreditMeter calls GitHub's **personal** billing endpoint:
+
+```text
+GET /users/{username}/settings/billing/ai_credit/usage
+```
+
+This endpoint only returns data if you purchased **your own individual**
+Copilot plan. Per GitHub's billing API docs, if your Copilot access is instead
+provided and billed through a **GitHub organization or enterprise** (the
+common case for company-managed accounts), your usage is *not* included in
+this personal endpoint at all — GitHub says to use the organization- or
+enterprise-level endpoints instead, e.g.:
+
+```text
+GET /organizations/{org}/settings/billing/ai_credit/usage   (requires org admin access)
+```
+
+**CreditMeter does not currently call the organization/enterprise endpoints.**
+There is no `--org`/enterprise CLI option — passing an org or enterprise name
+today has no effect on which API is queried. If your account's Copilot is
+org/enterprise-managed, `--test-api` will typically fail with `HTTP 401` or
+`HTTP 403` against the personal endpoint, even with a valid, unexpired PAT.
+This is expected today, not a bug — supporting the organization/enterprise
+usage endpoints would be a separate feature (different endpoint, and a PAT
+with organization admin-level billing read access instead of the personal
+"Plan" permission).
 
 ## Privacy
 
@@ -40,8 +71,10 @@ CreditMeter is local-only.
 
 - Windows
 - .NET 9 SDK for building from source
-- A GitHub personal access token with access to the relevant Copilot billing /
-  usage endpoint
+- A GitHub personal access token (fine-grained, with the "Plan" read-only user
+  permission) for your **own individual** Copilot plan — see
+  [Supported accounts](#supported-accounts-personal-copilot-billing-only) above
+  if your Copilot is managed through a company organization/enterprise instead
 
 ## Repo layout
 
@@ -61,6 +94,8 @@ CreditMeter/
         ├── Settings.cs
         ├── GitHubApiClient.cs
         ├── CreditState.cs
+        ├── MeterColors.cs
+        ├── TrayIconRenderer.cs
         └── MeterPopupWindow.cs
 ```
 
@@ -123,7 +158,7 @@ AI credits used: 427
 For sanitized debugging output:
 
 ```powershell
-dotnet run --project src/CreditMeter/CreditMeter.csproj -- --debug-api
+dotnet run --project src/CreditMeter/CreditMeter.csproj -- --test-api --debug-api
 ```
 
 Diagnostics must never include your PAT.
@@ -154,7 +189,7 @@ and popup state.
 --set-credit-limit <credits>   Save optional local monthly AI-credit limit
 --clear-credit-limit           Remove local monthly AI-credit limit
 --test-api                     Test GitHub usage API with clean output
---debug-api                    Test GitHub usage API with sanitized diagnostics
+--debug-api                    Add sanitized diagnostics; only takes effect with --test-api
 --help                         Show available commands
 ```
 

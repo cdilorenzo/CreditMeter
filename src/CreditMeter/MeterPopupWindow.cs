@@ -45,7 +45,7 @@ internal static class MeterPopupWindow
     {
         if (s_hWnd != IntPtr.Zero && IsWindowVisible(s_hWnd))
         {
-            InvalidateRect(s_hWnd, IntPtr.Zero, true);
+            _ = InvalidateRect(s_hWnd, IntPtr.Zero, true);
         }
     }
 
@@ -53,7 +53,7 @@ internal static class MeterPopupWindow
     {
         if (s_hWnd != IntPtr.Zero)
         {
-            ShowWindow(s_hWnd, SW_HIDE);
+            _ = ShowWindow(s_hWnd, SW_HIDE);
         }
     }
 
@@ -77,7 +77,7 @@ internal static class MeterPopupWindow
                 hIconSm = IntPtr.Zero
             };
 
-            RegisterClassEx(ref wc);
+            _ = RegisterClassEx(ref wc);
             s_classRegistered = true;
         }
 
@@ -93,17 +93,17 @@ internal static class MeterPopupWindow
 
     private static void ShowNearCursor()
     {
-        GetCursorPos(out POINT pt);
+        _ = GetCursorPos(out POINT pt);
 
         // Anchor above-left of the cursor, similar to how the tray's own
         // flyouts appear near the notification area.
         int x = pt.X - Width + 20;
         int y = pt.Y - Height - 10;
 
-        SetWindowPos(s_hWnd, HWND_TOPMOST, x, y, Width, Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        ShowWindow(s_hWnd, SW_SHOWNOACTIVATE);
-        SetForegroundWindow(s_hWnd);
-        SetFocus(s_hWnd);
+        _ = SetWindowPos(s_hWnd, HWND_TOPMOST, x, y, Width, Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        _ = ShowWindow(s_hWnd, SW_SHOWNOACTIVATE);
+        _ = SetForegroundWindow(s_hWnd);
+        _ = SetFocus(s_hWnd);
     }
 
     private static IntPtr WindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -140,20 +140,20 @@ internal static class MeterPopupWindow
     {
         IntPtr hdc = BeginPaint(hWnd, out PAINTSTRUCT ps);
 
-        GetClientRect(hWnd, out RECT rect);
+        _ = GetClientRect(hWnd, out RECT rect);
 
         // Outer bezel + inset "screen" gives the little meter panel a boxed,
         // dashboard-instrument feel using nothing but a couple of FillRect calls.
-        IntPtr bezel = CreateSolidBrush(0x00303030); // dark gray bezel (0x00BBGGRR)
-        FillRect(hdc, ref rect, bezel);
-        DeleteObject(bezel);
+        IntPtr bezel = CreateSolidBrush(MeterColors.Track); // dark gray bezel
+        _ = FillRect(hdc, ref rect, bezel);
+        _ = DeleteObject(bezel);
 
         var screen = new RECT { Left = rect.Left + 4, Top = rect.Top + 4, Right = rect.Right - 4, Bottom = rect.Bottom - 4 };
-        IntPtr screenBrush = CreateSolidBrush(0x00100C0C); // near-black meter "glass"
-        FillRect(hdc, ref screen, screenBrush);
-        DeleteObject(screenBrush);
+        IntPtr screenBrush = CreateSolidBrush(MeterColors.Glass);
+        _ = FillRect(hdc, ref screen, screenBrush);
+        _ = DeleteObject(screenBrush);
 
-        SetBkMode(hdc, TRANSPARENT_BKMODE);
+        _ = SetBkMode(hdc, TRANSPARENT_BKMODE);
 
         PopupContent content = DescribeState(s_state);
 
@@ -169,7 +169,7 @@ internal static class MeterPopupWindow
         IntPtr footerFont = CreateSegoeFont(-12, FW_NORMAL);
 
         DrawCenteredText(hdc, titleFont, "CreditMeter", 6, 18, rect.Right, 0x00B0B0B0);
-        DrawCenteredText(hdc, valueFont, content.MainText, 24, 46, rect.Right, 0x0000C8FF); // taxi-meter amber
+        DrawCenteredText(hdc, valueFont, content.MainText, 24, 46, rect.Right, MeterColors.Amber); // taxi-meter amber
         DrawCenteredText(hdc, smallFont, content.Subtitle, 70, 18, rect.Right, 0x00D8D8D8);
 
         if (content.ShowProgress)
@@ -179,12 +179,12 @@ internal static class MeterPopupWindow
 
         DrawCenteredText(hdc, footerFont, content.Footer, 106, 18, rect.Right, 0x00909090);
 
-        DeleteObject(titleFont);
-        DeleteObject(valueFont);
-        DeleteObject(smallFont);
-        DeleteObject(footerFont);
+        _ = DeleteObject(titleFont);
+        _ = DeleteObject(valueFont);
+        _ = DeleteObject(smallFont);
+        _ = DeleteObject(footerFont);
 
-        EndPaint(hWnd, ref ps);
+        _ = EndPaint(hWnd, ref ps);
     }
 
     /// <summary>
@@ -200,13 +200,13 @@ internal static class MeterPopupWindow
         var outer = new RECT { Left = margin, Top = top, Right = clientRect.Right - margin, Bottom = top + barHeight };
 
         IntPtr border = CreateSolidBrush(0x00606060); // dim gray outline against the dark screen
-        FillRect(hdc, ref outer, border);
-        DeleteObject(border);
+        _ = FillRect(hdc, ref outer, border);
+        _ = DeleteObject(border);
 
         var inner = new RECT { Left = outer.Left + 1, Top = outer.Top + 1, Right = outer.Right - 1, Bottom = outer.Bottom - 1 };
-        IntPtr track = CreateSolidBrush(0x00100C0C); // matches the meter "glass" background
-        FillRect(hdc, ref inner, track);
-        DeleteObject(track);
+        IntPtr track = CreateSolidBrush(MeterColors.Glass); // matches the meter "glass" background
+        _ = FillRect(hdc, ref inner, track);
+        _ = DeleteObject(track);
 
         double clamped = Math.Clamp(fraction, 0.0, 1.0);
         int fillWidth = (int)((inner.Right - inner.Left) * clamped);
@@ -215,10 +215,10 @@ internal static class MeterPopupWindow
             var fill = new RECT { Left = inner.Left, Top = inner.Top, Right = inner.Left + fillWidth, Bottom = inner.Bottom };
 
             // Green while under the limit, red once it's fully used — like a meter dial redlining.
-            int fillColor = clamped >= 1.0 ? 0x000000E0 : 0x0000C060;
+            int fillColor = clamped >= 1.0 ? MeterColors.Red : MeterColors.Green;
             IntPtr fillBrush = CreateSolidBrush(fillColor);
-            FillRect(hdc, ref fill, fillBrush);
-            DeleteObject(fillBrush);
+            _ = FillRect(hdc, ref fill, fillBrush);
+            _ = DeleteObject(fillBrush);
         }
     }
 
@@ -234,12 +234,12 @@ internal static class MeterPopupWindow
     private static void DrawCenteredText(IntPtr hdc, IntPtr font, string text, int top, int height, int width, int colorBgr)
     {
         IntPtr oldFont = SelectObject(hdc, font);
-        SetTextColor(hdc, colorBgr);
+        _ = SetTextColor(hdc, colorBgr);
 
         var rect = new RECT { Left = 8, Top = top, Right = width - 8, Bottom = top + height };
-        DrawText(hdc, text, text.Length, ref rect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+        _ = DrawText(hdc, text, text.Length, ref rect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-        SelectObject(hdc, oldFont);
+        _ = SelectObject(hdc, oldFont);
     }
 
     /// <summary>Everything the paint routine needs to render one popup frame.</summary>

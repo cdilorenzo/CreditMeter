@@ -171,15 +171,4 @@ public sealed class GitHubApiClient
             return new GitHubSpendResult(null, null, "Network error", requestUrl, null, null);
         }
     }
-
-    /// <summary>
-    /// Fetches the current month's AI credit usage and returns just the spend,
-    /// discarding credits and the failure reason. Returns null on any error. Kept
-    /// for callers that don't need the detailed result.
-    /// </summary>
-    public async Task<decimal?> GetCurrentMonthNetSpendAsync(string username, string pat)
-    {
-        GitHubSpendResult result = await GetCurrentMonthNetSpendDetailedAsync(username, pat).ConfigureAwait(false);
-        return result.Spend;
-    }
 }

@@ -18,10 +18,20 @@
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Icon resource embedded into the exe (add your own .ico later) -->
-    <!-- <Win32Resource>app.res</Win32Resource> -->
-  </ItemGroup>
+  <!-- Trim every byte we can from the published Native AOT binary. Only applied
+       in Release so Debug keeps full debuggability and readable exception
+       messages. Safe here because no code inspects Exception.Message/StackTrace
+       or relies on EventSource/HTTP diagnostics — every catch block already
+       replaces exceptions with short, static, sanitized messages of its own. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <DebuggerSupport>false</DebuggerSupport>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
 
   <ItemGroup>
     <!-- DPAPI (ProtectedData.Protect/Unprotect) lives outside the base framework on .NET Core+ -->

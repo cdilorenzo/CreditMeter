@@ -16,11 +16,6 @@ internal static class TrayIconRenderer
 {
     private const int Size = 32;
 
-    private const int ColorGlass = 0x00100C0C;      // near-black meter "glass" background
-    private const int ColorAmber = 0x0000C8FF;      // default/neutral "taxi meter amber"
-    private const int ColorGreen = 0x0000C060;      // low usage
-    private const int ColorRed = 0x000000E0;        // at/over limit
-    private const int ColorTrack = 0x00303030;      // progress bar track
     private const int ColorAlertBadge = 0x000000C0; // "!" badge background
     private const int ColorWhite = 0x00FFFFFF;
 
@@ -67,7 +62,7 @@ internal static class TrayIconRenderer
 
             IntPtr oldColorBmp = SelectObject(hdcMem, hbmColor);
             DrawIconContent(hdcMem, state);
-            SelectObject(hdcMem, oldColorBmp);
+            _ = SelectObject(hdcMem, oldColorBmp);
 
             // Fully opaque mask (all bits 0). Since hbmColor has more than
             // 1 bit per pixel, Windows uses its pixels directly wherever the
@@ -86,8 +81,8 @@ internal static class TrayIconRenderer
             }
 
             IntPtr oldMonoBmp = SelectObject(hdcMono, hbmMask);
-            PatBlt(hdcMono, 0, 0, Size, Size, BLACKNESS);
-            SelectObject(hdcMono, oldMonoBmp);
+            _ = PatBlt(hdcMono, 0, 0, Size, Size, BLACKNESS);
+            _ = SelectObject(hdcMono, oldMonoBmp);
 
             var iconInfo = new ICONINFO
             {
@@ -104,11 +99,11 @@ internal static class TrayIconRenderer
         }
         finally
         {
-            if (hbmColor != IntPtr.Zero) DeleteObject(hbmColor);
-            if (hbmMask != IntPtr.Zero) DeleteObject(hbmMask);
-            if (hdcMem != IntPtr.Zero) DeleteDC(hdcMem);
-            if (hdcMono != IntPtr.Zero) DeleteDC(hdcMono);
-            ReleaseDC(IntPtr.Zero, hdcScreen);
+            if (hbmColor != IntPtr.Zero) _ = DeleteObject(hbmColor);
+            if (hbmMask != IntPtr.Zero) _ = DeleteObject(hbmMask);
+            if (hdcMem != IntPtr.Zero) _ = DeleteDC(hdcMem);
+            if (hdcMono != IntPtr.Zero) _ = DeleteDC(hdcMono);
+            _ = ReleaseDC(IntPtr.Zero, hdcScreen);
         }
     }
 
@@ -121,15 +116,15 @@ internal static class TrayIconRenderer
     private static void DrawIconContent(IntPtr hdc, CreditState? state)
     {
         var full = new RECT { Left = 0, Top = 0, Right = Size, Bottom = Size };
-        IntPtr background = CreateSolidBrush(ColorGlass);
-        FillRect(hdc, ref full, background);
-        DeleteObject(background);
+        IntPtr background = CreateSolidBrush(MeterColors.Glass);
+        _ = FillRect(hdc, ref full, background);
+        _ = DeleteObject(background);
 
-        SetBkMode(hdc, TRANSPARENT_BKMODE);
+        _ = SetBkMode(hdc, TRANSPARENT_BKMODE);
 
         if (state is not null && state.ApiUnavailable)
         {
-            DrawDollarMark(hdc, ColorAmber);
+            DrawDollarMark(hdc, MeterColors.Amber);
             DrawAlertBadge(hdc);
             return;
         }
@@ -138,7 +133,7 @@ internal static class TrayIconRenderer
             state.MonthlyCreditLimit is decimal limit && limit > 0)
         {
             double fraction = (double)(credits / limit);
-            int color = fraction >= 1.0 ? ColorRed : fraction >= 0.7 ? ColorAmber : ColorGreen;
+            int color = fraction >= 1.0 ? MeterColors.Red : fraction >= 0.7 ? MeterColors.Amber : MeterColors.Green;
             DrawDollarMark(hdc, color);
             DrawProgressBar(hdc, fraction, color);
             return;
@@ -146,7 +141,7 @@ internal static class TrayIconRenderer
 
         // Stable default: startup, not-yet-configured, still loading, or
         // configured without a monthly limit to compare against.
-        DrawDollarMark(hdc, ColorAmber);
+        DrawDollarMark(hdc, MeterColors.Amber);
     }
 
     private static void DrawDollarMark(IntPtr hdc, int colorBgr)
@@ -158,13 +153,13 @@ internal static class TrayIconRenderer
             DEFAULT_PITCH | FF_SWISS, "Segoe UI");
 
         IntPtr oldFont = SelectObject(hdc, font);
-        SetTextColor(hdc, colorBgr);
+        _ = SetTextColor(hdc, colorBgr);
 
         var rect = new RECT { Left = 0, Top = 0, Right = Size, Bottom = Size };
-        DrawText(hdc, "$", 1, ref rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        _ = DrawText(hdc, "$", 1, ref rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-        SelectObject(hdc, oldFont);
-        DeleteObject(font);
+        _ = SelectObject(hdc, oldFont);
+        _ = DeleteObject(font);
     }
 
     /// <summary>Thin bar along the bottom edge, filled proportionally to usage — a tiny gauge.</summary>
@@ -175,9 +170,9 @@ internal static class TrayIconRenderer
         const int barBottom = Size - 3;
 
         var track = new RECT { Left = margin, Top = barTop, Right = Size - margin, Bottom = barBottom };
-        IntPtr trackBrush = CreateSolidBrush(ColorTrack);
-        FillRect(hdc, ref track, trackBrush);
-        DeleteObject(trackBrush);
+        IntPtr trackBrush = CreateSolidBrush(MeterColors.Track);
+        _ = FillRect(hdc, ref track, trackBrush);
+        _ = DeleteObject(trackBrush);
 
         double clamped = Math.Clamp(fraction, 0.0, 1.0);
         int fillWidth = (int)((track.Right - track.Left) * clamped);
@@ -188,8 +183,8 @@ internal static class TrayIconRenderer
 
         var fill = new RECT { Left = track.Left, Top = track.Top, Right = track.Left + fillWidth, Bottom = track.Bottom };
         IntPtr fillBrush = CreateSolidBrush(colorBgr);
-        FillRect(hdc, ref fill, fillBrush);
-        DeleteObject(fillBrush);
+        _ = FillRect(hdc, ref fill, fillBrush);
+        _ = DeleteObject(fillBrush);
     }
 
     /// <summary>Small red circle with a white "!" in the top-right corner, used when the API is unavailable.</summary>
@@ -204,12 +199,12 @@ internal static class TrayIconRenderer
         IntPtr oldBrush = SelectObject(hdc, brush);
         IntPtr oldPen = SelectObject(hdc, pen);
 
-        Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
+        _ = Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
 
-        SelectObject(hdc, oldBrush);
-        SelectObject(hdc, oldPen);
-        DeleteObject(brush);
-        DeleteObject(pen);
+        _ = SelectObject(hdc, oldBrush);
+        _ = SelectObject(hdc, oldPen);
+        _ = DeleteObject(brush);
+        _ = DeleteObject(pen);
 
         IntPtr font = CreateFont(
             -12, 0, 0, 0, FW_BOLD,
@@ -218,12 +213,12 @@ internal static class TrayIconRenderer
             DEFAULT_PITCH | FF_SWISS, "Segoe UI");
 
         IntPtr oldFont = SelectObject(hdc, font);
-        SetTextColor(hdc, ColorWhite);
+        _ = SetTextColor(hdc, ColorWhite);
 
         var rect = new RECT { Left = cx - r, Top = cy - r, Right = cx + r, Bottom = cy + r };
-        DrawText(hdc, "!", 1, ref rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        _ = DrawText(hdc, "!", 1, ref rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-        SelectObject(hdc, oldFont);
-        DeleteObject(font);
+        _ = SelectObject(hdc, oldFont);
+        _ = DeleteObject(font);
     }
 }

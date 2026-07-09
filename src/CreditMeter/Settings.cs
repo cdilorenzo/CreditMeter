@@ -12,7 +12,6 @@ namespace CreditMeter;
 /// </summary>
 public sealed class AppSettings
 {
-    public string? OrgName { get; set; }
     public string? EncryptedPat { get; set; }
     public int PollIntervalMinutes { get; set; } = 5;
     public string? GitHubUsername { get; set; }

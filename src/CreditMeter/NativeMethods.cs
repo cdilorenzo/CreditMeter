@@ -10,7 +10,6 @@ namespace CreditMeter;
 internal static class NativeMethods
 {
     public const int WM_DESTROY = 0x0002;
-    public const int WM_COMMAND = 0x0111;
     public const int WM_RBUTTONUP = 0x0205;
     public const int WM_LBUTTONUP = 0x0202;
     public const int WM_APP_TRAYCALLBACK = 0x8000 + 1; // WM_APP + 1

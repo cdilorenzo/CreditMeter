@@ -125,8 +125,8 @@ internal static class Program
         // Standard Win32 message pump. This blocks until WM_QUIT.
         while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0))
         {
-            TranslateMessage(ref msg);
-            DispatchMessage(ref msg);
+            _ = TranslateMessage(ref msg);
+            _ = DispatchMessage(ref msg);
         }
 
         s_pollingCts?.Cancel();
@@ -292,7 +292,7 @@ internal static class Program
 
     /// <summary>
     /// Temporary way to configure CreditMeter before a real settings UI exists.
-    /// Usage: CreditMeter.exe --set-pat &lt;github-pat&gt; --org &lt;org-name&gt;
+    /// Usage: CreditMeter.exe --set-pat &lt;github-pat&gt;
     /// Saves the PAT encrypted via DPAPI and exits — does not start the tray icon.
     /// </summary>
     private static bool TryHandleSetPatCommand(string[] args)
@@ -305,16 +305,9 @@ internal static class Program
 
         AppSettings settings = SettingsStore.Load();
         SettingsStore.SetPat(settings, pat);
-
-        string? org = GetArgValue(args, "--org");
-        if (org is not null)
-        {
-            settings.OrgName = org;
-        }
-
         SettingsStore.Save(settings);
 
-        MessageBox(IntPtr.Zero,
+        _ = MessageBox(IntPtr.Zero,
             "Saved. The PAT is encrypted at rest with DPAPI and tied to this Windows account.",
             "CreditMeter", 0);
 
@@ -345,7 +338,7 @@ internal static class Program
         string? pat = Environment.GetEnvironmentVariable(envVarName);
         if (string.IsNullOrEmpty(pat))
         {
-            MessageBox(IntPtr.Zero, $"Environment variable '{envVarName}' is not set or empty.", "CreditMeter", 0);
+            _ = MessageBox(IntPtr.Zero, $"Environment variable '{envVarName}' is not set or empty.", "CreditMeter", 0);
             return true;
         }
 
@@ -353,7 +346,7 @@ internal static class Program
         SettingsStore.SetPat(settings, pat);
         SettingsStore.Save(settings);
 
-        MessageBox(IntPtr.Zero,
+        _ = MessageBox(IntPtr.Zero,
             "Saved. The PAT is encrypted at rest with DPAPI and tied to this Windows account.",
             "CreditMeter", 0);
 
@@ -383,7 +376,7 @@ internal static class Program
             --help
             """;
 
-        MessageBox(IntPtr.Zero, helpText, "CreditMeter", 0);
+        _ = MessageBox(IntPtr.Zero, helpText, "CreditMeter", 0);
 
         return true;
     }
@@ -405,7 +398,7 @@ internal static class Program
         settings.GitHubUsername = username;
         SettingsStore.Save(settings);
 
-        MessageBox(IntPtr.Zero, "GitHub username saved.", "CreditMeter", 0);
+        _ = MessageBox(IntPtr.Zero, "GitHub username saved.", "CreditMeter", 0);
 
         return true;
     }
@@ -425,7 +418,7 @@ internal static class Program
 
         if (!decimal.TryParse(rawValue, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal limit) || limit < 0)
         {
-            MessageBox(IntPtr.Zero, "Invalid credit limit.", "CreditMeter", 0);
+            _ = MessageBox(IntPtr.Zero, "Invalid credit limit.", "CreditMeter", 0);
             return true;
         }
 
@@ -433,7 +426,7 @@ internal static class Program
         settings.MonthlyCreditLimit = limit;
         SettingsStore.Save(settings);
 
-        MessageBox(IntPtr.Zero, "Monthly credit limit saved.", "CreditMeter", 0);
+        _ = MessageBox(IntPtr.Zero, "Monthly credit limit saved.", "CreditMeter", 0);
 
         return true;
     }
@@ -454,7 +447,7 @@ internal static class Program
         settings.MonthlyCreditLimit = null;
         SettingsStore.Save(settings);
 
-        MessageBox(IntPtr.Zero, "Monthly credit limit cleared.", "CreditMeter", 0);
+        _ = MessageBox(IntPtr.Zero, "Monthly credit limit cleared.", "CreditMeter", 0);
 
         return true;
     }
@@ -481,7 +474,7 @@ internal static class Program
         ApiInputs inputs = ResolveApiInputs(settings, args);
         if (!inputs.IsConfigured)
         {
-            MessageBox(IntPtr.Zero, inputs.MissingReason ?? "Not configured.", "CreditMeter", 0);
+            _ = MessageBox(IntPtr.Zero, inputs.MissingReason ?? "Not configured.", "CreditMeter", 0);
             return true;
         }
 
@@ -502,12 +495,12 @@ internal static class Program
 
             string message = $"{diagnostics}This month's Copilot spend: {formattedSpend}\nAI credits used: {formattedCredits}";
 
-            MessageBox(IntPtr.Zero, message, "CreditMeter", 0);
+            _ = MessageBox(IntPtr.Zero, message, "CreditMeter", 0);
         }
         else
         {
             string reason = result.Error ?? "API returned no spend";
-            MessageBox(IntPtr.Zero, $"{diagnostics}API call failed: {reason}", "CreditMeter", 0);
+            _ = MessageBox(IntPtr.Zero, $"{diagnostics}API call failed: {reason}", "CreditMeter", 0);
         }
 
         return true;
@@ -515,14 +508,9 @@ internal static class Program
 
     private static string BuildStartupTooltip(AppSettings settings)
     {
-        if (string.IsNullOrEmpty(settings.EncryptedPat))
-        {
-            return "CreditMeter — not configured";
-        }
-
-        return string.IsNullOrEmpty(settings.OrgName)
-            ? "CreditMeter — configured"
-            : $"CreditMeter — {settings.OrgName}";
+        return string.IsNullOrEmpty(settings.EncryptedPat)
+            ? "CreditMeter — not configured"
+            : "CreditMeter — configured";
     }
 
     /// <summary>
@@ -577,7 +565,7 @@ internal static class Program
             szTip = tooltip
         };
 
-        Shell_NotifyIcon(NIM_ADD, ref nid);
+        _ = Shell_NotifyIcon(NIM_ADD, ref nid);
         s_trayIconHandle = generatedIcon;
     }
 
@@ -593,7 +581,7 @@ internal static class Program
             szTip = tooltip
         };
 
-        Shell_NotifyIcon(NIM_MODIFY, ref nid);
+        _ = Shell_NotifyIcon(NIM_MODIFY, ref nid);
     }
 
     /// <summary>
@@ -620,13 +608,13 @@ internal static class Program
             hIcon = iconToShow
         };
 
-        Shell_NotifyIcon(NIM_MODIFY, ref nid);
+        _ = Shell_NotifyIcon(NIM_MODIFY, ref nid);
 
         // Only ever destroy icons we generated ourselves — never the shared
         // stock IDI_APPLICATION icon.
         if (s_trayIconHandle != IntPtr.Zero)
         {
-            DestroyIcon(s_trayIconHandle);
+            _ = DestroyIcon(s_trayIconHandle);
         }
 
         s_trayIconHandle = generatedIcon;
@@ -641,11 +629,11 @@ internal static class Program
             uID = TrayIconId
         };
 
-        Shell_NotifyIcon(NIM_DELETE, ref nid);
+        _ = Shell_NotifyIcon(NIM_DELETE, ref nid);
 
         if (s_trayIconHandle != IntPtr.Zero)
         {
-            DestroyIcon(s_trayIconHandle);
+            _ = DestroyIcon(s_trayIconHandle);
             s_trayIconHandle = IntPtr.Zero;
         }
     }
@@ -653,24 +641,24 @@ internal static class Program
     private static void ShowContextMenu(IntPtr hWnd)
     {
         IntPtr menu = CreatePopupMenu();
-        AppendMenu(menu, 0, MenuIdRetry, "Retry now");
-        AppendMenu(menu, MF_SEPARATOR, 0, string.Empty);
-        AppendMenu(menu, 0, MenuIdExit, "Exit");
+        _ = AppendMenu(menu, 0, MenuIdRetry, "Retry now");
+        _ = AppendMenu(menu, MF_SEPARATOR, 0, string.Empty);
+        _ = AppendMenu(menu, 0, MenuIdExit, "Exit");
 
-        GetCursorPos(out POINT pt);
+        _ = GetCursorPos(out POINT pt);
 
         // Required so the menu closes if the user clicks away from it.
-        SetForegroundWindow(hWnd);
+        _ = SetForegroundWindow(hWnd);
 
         uint cmd = TrackPopupMenuEx(
             menu, TPM_RIGHTBUTTON | TPM_RETURNCMD,
             pt.X, pt.Y, hWnd, IntPtr.Zero);
 
-        DestroyMenu(menu);
+        _ = DestroyMenu(menu);
 
         if (cmd == MenuIdExit)
         {
-            PostMessage(hWnd, WM_DESTROY, IntPtr.Zero, IntPtr.Zero);
+            _ = PostMessage(hWnd, WM_DESTROY, IntPtr.Zero, IntPtr.Zero);
         }
         else if (cmd == MenuIdRetry)
         {
