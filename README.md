@@ -207,28 +207,6 @@ src/CreditMeter/bin/Release/net9.0-windows/win-x64/publish/
 
 Run the published `CreditMeter.exe` once locally before creating a release.
 
-## Tiny Tool Town pitch
-
-CreditMeter is a tiny taxi meter for AI spending.
-
-It sits in your Windows tray and shows your GitHub Copilot AI-credit burn in a
-small playful popup, so agentic coding suddenly feels like watching a cab fare
-tick upward.
-
-## Before publishing
-
-Before making the repo public or recording a demo GIF:
-
-- rotate any PAT that was ever shown in screenshots or terminal output
-- make sure `settings.json` is not committed
-- make sure `bin/`, `obj/`, and publish output are ignored
-- record a short GIF showing:
-  - the tray icon
-  - left-click popup
-  - AI credits used
-  - optional progress bar
-  - right-click menu with Retry now / Exit
-
 ## License
 
 MIT
