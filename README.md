@@ -27,34 +27,64 @@ It shows:
 The goal is not to be a full GitHub billing dashboard. CreditMeter is a small,
 fun, local utility that makes AI-credit burn visible.
 
-## Supported accounts (personal Copilot billing only)
+## Supported accounts
 
-CreditMeter calls GitHub's **personal** billing endpoint:
+CreditMeter supports two usage scopes (see `--set-scope` below):
 
-```text
-GET /users/{username}/settings/billing/ai_credit/usage
+- **user** (default) — GitHub's **personal** billing endpoint:
+
+  ```text
+  GET /users/{username}/settings/billing/ai_credit/usage
+  ```
+
+  This endpoint only returns data if you purchased **your own individual**
+  Copilot plan.
+
+- **org** — GitHub's **organization** billing endpoint, for accounts whose
+  Copilot access is provided and billed through a GitHub organization (the
+  common case for company-managed accounts):
+
+  ```text
+  GET /organizations/{org}/settings/billing/ai_credit/usage   (requires org admin access)
+  ```
+
+See [Organization mode](#organization-mode) below for how to switch scopes.
+
+## Organization mode
+
+If your Copilot access is billed through a GitHub organization rather than
+your own individual plan, switch CreditMeter to org scope:
+
+```powershell
+dotnet run --project src/CreditMeter/CreditMeter.csproj -- --set-scope org
+dotnet run --project src/CreditMeter/CreditMeter.csproj -- --set-org my-org
 ```
 
-This endpoint only returns data if you purchased **your own individual**
-Copilot plan. Per GitHub's billing API docs, if your Copilot access is instead
-provided and billed through a **GitHub organization or enterprise** (the
-common case for company-managed accounts), your usage is *not* included in
-this personal endpoint at all — GitHub says to use the organization- or
-enterprise-level endpoints instead, e.g.:
+Optionally narrow usage to a single org member instead of the whole
+organization:
 
-```text
-GET /organizations/{org}/settings/billing/ai_credit/usage   (requires org admin access)
+```powershell
+dotnet run --project src/CreditMeter/CreditMeter.csproj -- --set-org-user someuser
 ```
 
-**CreditMeter does not currently call the organization/enterprise endpoints.**
-There is no `--org`/enterprise CLI option — passing an org or enterprise name
-today has no effect on which API is queried. If your account's Copilot is
-org/enterprise-managed, `--test-api` will typically fail with `HTTP 401` or
-`HTTP 403` against the personal endpoint, even with a valid, unexpired PAT.
-This is expected today, not a bug — supporting the organization/enterprise
-usage endpoints would be a separate feature (different endpoint, and a PAT
-with organization admin-level billing read access instead of the personal
-"Plan" permission).
+Clear the member filter again to go back to whole-org usage:
+
+```powershell
+dotnet run --project src/CreditMeter/CreditMeter.csproj -- --clear-org-user
+```
+
+Switch back to personal usage at any time with `--set-scope user`.
+
+Org mode calls:
+
+```text
+GET /organizations/{org}/settings/billing/ai_credit/usage?year=YYYY&month=M
+```
+
+This requires a PAT with organization **Administration** read permission
+(not the personal "Plan" permission). If the PAT lacks that permission, the
+tray/popup show a sanitized hint — "API unavailable: org admin permission
+required" — instead of the raw HTTP error.
 
 ## Privacy
 
@@ -71,10 +101,11 @@ CreditMeter is local-only.
 
 - Windows
 - .NET 9 SDK for building from source
-- A GitHub personal access token (fine-grained, with the "Plan" read-only user
-  permission) for your **own individual** Copilot plan — see
-  [Supported accounts](#supported-accounts-personal-copilot-billing-only) above
-  if your Copilot is managed through a company organization/enterprise instead
+- A GitHub personal access token: fine-grained with the "Plan" read-only user
+  permission for personal (`user` scope) usage, or with organization
+  **Administration** read permission for organization-billed (`org` scope)
+  usage — see [Supported accounts](#supported-accounts) and
+  [Organization mode](#organization-mode) above
 
 ## Repo layout
 
@@ -188,6 +219,11 @@ and popup state.
 --set-username <username>      Save GitHub username
 --set-credit-limit <credits>   Save optional local monthly AI-credit limit
 --clear-credit-limit           Remove local monthly AI-credit limit
+--set-scope user               Use personal Copilot AI-credit usage
+--set-scope org                Use organization-billed Copilot AI-credit usage
+--set-org <org>                Save the organization login for org scope
+--set-org-user <username>      Narrow org usage to one member
+--clear-org-user               Remove the org member filter (whole-org usage)
 --test-api                     Test GitHub usage API with clean output
 --debug-api                    Add sanitized diagnostics; only takes effect with --test-api
 --help                         Show available commands

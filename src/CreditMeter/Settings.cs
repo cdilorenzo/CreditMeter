@@ -22,6 +22,22 @@ public sealed class AppSettings
     /// the tray tooltip/popup compare usage against.
     /// </summary>
     public decimal? MonthlyCreditLimit { get; set; }
+
+    /// <summary>
+    /// Whether usage is fetched from the personal ("user") billing endpoint or
+    /// the organization ("org") billing endpoint. Defaults to "user" so
+    /// existing installs keep working unchanged.
+    /// </summary>
+    public string UsageScope { get; set; } = "user";
+
+    /// <summary>Organization login used for org-scoped usage. Only used when UsageScope is "org".</summary>
+    public string? OrgName { get; set; }
+
+    /// <summary>
+    /// Optional username filter applied to the org usage endpoint (&amp;user=...).
+    /// When null, org usage covers the whole organization.
+    /// </summary>
+    public string? OrgUserFilter { get; set; }
 }
 
 /// <summary>

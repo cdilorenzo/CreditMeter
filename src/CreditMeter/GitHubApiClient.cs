@@ -77,10 +77,39 @@ public sealed class GitHubApiClient
     /// if the call didn't succeed. Never throws — this is used both by the
     /// background poller and by --test-api.
     /// </summary>
-    internal async Task<GitHubSpendResult> GetCurrentMonthNetSpendDetailedAsync(string username, string pat)
+    internal Task<GitHubSpendResult> GetCurrentMonthNetSpendDetailedAsync(string username, string pat)
     {
         string requestUrl = $"https://api.github.com/users/{username}/settings/billing/ai_credit/usage";
+        return FetchUsageAsync(requestUrl, pat);
+    }
 
+    /// <summary>
+    /// Fetches the current month's AI credit usage billed to <paramref name="org"/>.
+    /// If <paramref name="userFilter"/> is set, the org usage is narrowed to that
+    /// single member via the endpoint's <c>&amp;user=</c> query parameter. Requires
+    /// a PAT with organization Administration read permission. Reuses the exact
+    /// same spend/credit summing logic as the personal endpoint.
+    /// </summary>
+    internal Task<GitHubSpendResult> GetCurrentMonthOrgSpendDetailedAsync(string org, string? userFilter, string pat)
+    {
+        DateTime now = DateTime.UtcNow;
+        string requestUrl = $"https://api.github.com/organizations/{org}/settings/billing/ai_credit/usage?year={now.Year}&month={now.Month}";
+
+        if (!string.IsNullOrEmpty(userFilter))
+        {
+            requestUrl += $"&user={Uri.EscapeDataString(userFilter)}";
+        }
+
+        return FetchUsageAsync(requestUrl, pat);
+    }
+
+    /// <summary>
+    /// Shared HTTP call + parsing logic for both the personal and organization
+    /// billing usage endpoints — they return the same usageItems shape, only the
+    /// URL differs.
+    /// </summary>
+    private async Task<GitHubSpendResult> FetchUsageAsync(string requestUrl, string pat)
+    {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);

@@ -15,6 +15,13 @@ public sealed class CreditState
     /// <summary>User-configured local monthly credit limit (not fetched from any API). Null if not set.</summary>
     public decimal? MonthlyCreditLimit { get; set; }
 
+    /// <summary>
+    /// Short descriptor of the usage scope shown alongside spend/credits, e.g.
+    /// "ORG this month" or "USERNAME via ORG" for org-scoped usage. Null for
+    /// personal ("user") scope, which keeps its original unadorned wording.
+    /// </summary>
+    public string? ScopeDescriptor { get; set; }
+
     public bool IsConfigured { get; set; }
     public bool ApiUnavailable { get; set; }
     public bool IsLoading { get; set; }

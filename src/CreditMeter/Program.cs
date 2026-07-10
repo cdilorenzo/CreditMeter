@@ -5,11 +5,20 @@ using static CreditMeter.NativeMethods;
 namespace CreditMeter;
 
 /// <summary>
-/// Result of resolving the PAT/username needed to call the GitHub API.
-/// <see cref="MissingReason"/> is a short, user-facing explanation (never
-/// contains the PAT) set only when <see cref="IsConfigured"/> is false.
+/// Result of resolving the PAT/username (or org) needed to call the GitHub
+/// API. <see cref="MissingReason"/> is a short, user-facing explanation
+/// (never contains the PAT) set only when <see cref="IsConfigured"/> is
+/// false. <see cref="UsageScope"/> is either "user" or "org". For "org"
+/// scope, <see cref="OrgName"/> is required and <see cref="Username"/>
+/// (used as the org's user filter) is optional.
 /// </summary>
-internal readonly record struct ApiInputs(string? Pat, string? Username, bool IsConfigured, string? MissingReason);
+internal readonly record struct ApiInputs(
+    string? Pat,
+    string? Username,
+    string UsageScope,
+    string? OrgName,
+    bool IsConfigured,
+    string? MissingReason);
 
 internal static class Program
 {
@@ -38,6 +47,9 @@ internal static class Program
     private static string? s_username;
     private static string? s_pat;
     private static decimal? s_monthlyCreditLimit;
+    private static string s_usageScope = "user";
+    private static string? s_orgName;
+    private static string? s_scopeDescriptor;
 
     // Guard against overlapping API calls (periodic tick racing a manual retry).
     // 0 = idle, 1 = a poll is in flight.
@@ -76,6 +88,26 @@ internal static class Program
         }
 
         if (TryHandleClearCreditLimitCommand(args))
+        {
+            return 0;
+        }
+
+        if (TryHandleSetScopeCommand(args))
+        {
+            return 0;
+        }
+
+        if (TryHandleSetOrgCommand(args))
+        {
+            return 0;
+        }
+
+        if (TryHandleSetOrgUserCommand(args))
+        {
+            return 0;
+        }
+
+        if (TryHandleClearOrgUserCommand(args))
         {
             return 0;
         }
@@ -145,19 +177,65 @@ internal static class Program
     private static ApiInputs ResolveApiInputs(AppSettings settings, string[] args)
     {
         string? pat = SettingsStore.GetPlainTextPat(settings);
-        string? username = GetArgValue(args, "--username") ?? settings.GitHubUsername;
+        string scope = string.Equals(settings.UsageScope, "org", StringComparison.OrdinalIgnoreCase) ? "org" : "user";
 
         if (pat is null)
         {
-            return new ApiInputs(null, username, false, "No PAT configured. Run --set-pat first.");
+            return new ApiInputs(null, null, scope, null, false, "No PAT configured. Run --set-pat first.");
         }
+
+        if (scope == "org")
+        {
+            string? org = GetArgValue(args, "--org") ?? settings.OrgName;
+            string? orgUserFilter = GetArgValue(args, "--username") ?? settings.OrgUserFilter;
+
+            if (string.IsNullOrEmpty(org))
+            {
+                return new ApiInputs(pat, orgUserFilter, scope, null, false, "No organization configured. Run --set-org first.");
+            }
+
+            return new ApiInputs(pat, orgUserFilter, scope, org, true, null);
+        }
+
+        string? username = GetArgValue(args, "--username") ?? settings.GitHubUsername;
 
         if (string.IsNullOrEmpty(username))
         {
-            return new ApiInputs(pat, null, false, "No username configured. Run --set-username first or pass --username.");
+            return new ApiInputs(pat, null, scope, null, false, "No username configured. Run --set-username first or pass --username.");
         }
 
-        return new ApiInputs(pat, username, true, null);
+        return new ApiInputs(pat, username, scope, null, true, null);
+    }
+
+    /// <summary>
+    /// Builds the scope descriptor used in the tray tooltip and popup
+    /// subtitle. Null for personal ("user") scope so its wording is
+    /// completely unchanged. For org scope: "ORG this month" with no user
+    /// filter, or "USERNAME via ORG" with one.
+    /// </summary>
+    private static string? BuildScopeDescriptor(string usageScope, string? orgName, string? orgUserFilter)
+    {
+        if (!string.Equals(usageScope, "org", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(orgName))
+        {
+            return null;
+        }
+
+        return string.IsNullOrEmpty(orgUserFilter)
+            ? $"{orgName} this month"
+            : $"{orgUserFilter} via {orgName}";
+    }
+
+    /// <summary>
+    /// Maps a raw sanitized error (e.g. "HTTP 403") to a friendlier hint for
+    /// org-scoped polls, where 403 almost always means the PAT lacks the
+    /// organization Administration read permission. Never touches non-403
+    /// errors or user-scoped errors.
+    /// </summary>
+    private static string? NormalizeError(string? error, string usageScope)
+    {
+        return (usageScope == "org" && error == "HTTP 403")
+            ? "org admin permission required"
+            : error;
     }
 
     /// <summary>
@@ -173,7 +251,7 @@ internal static class Program
         if (!inputs.IsConfigured)
         {
             s_state.IsConfigured = false;
-            UpdateTrayTooltip("CreditMeter: configure PAT and username");
+            UpdateTrayTooltip(inputs.MissingReason is null ? "CreditMeter: configure PAT and username" : $"CreditMeter: {inputs.MissingReason}");
             RefreshTrayIcon(s_state);
             MeterPopupWindow.NotifyStateChanged();
             return;
@@ -183,8 +261,12 @@ internal static class Program
         s_state.IsLoading = true;
         s_username = inputs.Username;
         s_pat = inputs.Pat;
+        s_usageScope = inputs.UsageScope;
+        s_orgName = inputs.OrgName;
         s_monthlyCreditLimit = settings.MonthlyCreditLimit;
         s_state.MonthlyCreditLimit = s_monthlyCreditLimit;
+        s_scopeDescriptor = BuildScopeDescriptor(s_usageScope, s_orgName, s_username);
+        s_state.ScopeDescriptor = s_scopeDescriptor;
         s_client = new GitHubApiClient();
 
         UpdateTrayTooltip("CreditMeter: updating...");
@@ -214,11 +296,18 @@ internal static class Program
     /// <summary>
     /// Runs one poll, guarding against overlapping calls (e.g. the periodic
     /// timer ticking while a manual "Retry now" is still in flight). No-ops
-    /// if not configured or if a poll is already running.
+    /// if not configured or if a poll is already running. Org scope only
+    /// requires an org name — the username is an optional filter.
     /// </summary>
     private static async Task TriggerPollAsync()
     {
-        if (s_client is null || s_username is null || s_pat is null)
+        if (s_client is null || s_pat is null)
+        {
+            return;
+        }
+
+        bool ready = s_usageScope == "org" ? s_orgName is not null : s_username is not null;
+        if (!ready)
         {
             return;
         }
@@ -232,7 +321,7 @@ internal static class Program
 
         try
         {
-            await PollCopilotSpendOnceAsync(s_client, s_username, s_pat, s_state).ConfigureAwait(false);
+            await PollCopilotSpendOnceAsync(s_client, s_usageScope, s_orgName, s_username, s_pat, s_state).ConfigureAwait(false);
         }
         finally
         {
@@ -244,9 +333,11 @@ internal static class Program
     /// Shared single-poll logic used by both the periodic loop and manual
     /// "Retry now" so their behavior never drifts apart. Sets Loading before
     /// the call, updates state/tooltip/popup on completion, and never lets
-    /// an API failure escape and crash the tray app.
+    /// an API failure escape and crash the tray app. For "org" scope,
+    /// <paramref name="username"/> (if set) is used only as the org's
+    /// optional per-member usage filter.
     /// </summary>
-    private static async Task PollCopilotSpendOnceAsync(GitHubApiClient client, string username, string pat, CreditState state)
+    private static async Task PollCopilotSpendOnceAsync(GitHubApiClient client, string usageScope, string? orgName, string? username, string pat, CreditState state)
     {
         state.IsLoading = true;
         UpdateTrayTooltip("CreditMeter: updating...");
@@ -255,7 +346,10 @@ internal static class Program
 
         try
         {
-            GitHubSpendResult result = await client.GetCurrentMonthNetSpendDetailedAsync(username, pat).ConfigureAwait(false);
+            GitHubSpendResult result = usageScope == "org"
+                ? await client.GetCurrentMonthOrgSpendDetailedAsync(orgName!, username, pat).ConfigureAwait(false)
+                : await client.GetCurrentMonthNetSpendDetailedAsync(username!, pat).ConfigureAwait(false);
+
             if (result.Spend is not null && result.Credits is not null)
             {
                 state.CurrentMonthSpend = result.Spend;
@@ -264,13 +358,13 @@ internal static class Program
                 state.ApiUnavailable = false;
                 state.LastError = null;
                 state.LastUpdated = DateTimeOffset.UtcNow;
-                UpdateTrayTooltip(BuildUsageTooltip(result.Spend.Value, result.Credits.Value, s_monthlyCreditLimit));
+                UpdateTrayTooltip(BuildUsageTooltip(result.Spend.Value, result.Credits.Value, s_monthlyCreditLimit, s_scopeDescriptor));
                 RefreshTrayIcon(state);
             }
             else
             {
                 state.ApiUnavailable = true;
-                state.LastError = result.Error ?? "API returned no spend";
+                state.LastError = NormalizeError(result.Error, usageScope) ?? "API returned no spend";
                 UpdateTrayTooltip("CreditMeter: API unavailable");
                 RefreshTrayIcon(state);
             }
@@ -371,6 +465,11 @@ internal static class Program
             --set-username <username>
             --set-credit-limit <credits>
             --clear-credit-limit
+            --set-scope user
+            --set-scope org
+            --set-org <org>
+            --set-org-user <username>
+            --clear-org-user
             --test-api
             --debug-api
             --help
@@ -453,11 +552,108 @@ internal static class Program
     }
 
     /// <summary>
+    /// Switches usage between personal ("user") and organization-billed
+    /// ("org") Copilot usage. Usage: CreditMeter.exe --set-scope user|org
+    /// Saves and exits — does not start the tray icon.
+    /// </summary>
+    private static bool TryHandleSetScopeCommand(string[] args)
+    {
+        string? scope = GetArgValue(args, "--set-scope");
+        if (scope is null)
+        {
+            return false;
+        }
+
+        if (!string.Equals(scope, "user", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(scope, "org", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = MessageBox(IntPtr.Zero, "Invalid scope. Use 'user' or 'org'.", "CreditMeter", 0);
+            return true;
+        }
+
+        AppSettings settings = SettingsStore.Load();
+        settings.UsageScope = scope.ToLowerInvariant();
+        SettingsStore.Save(settings);
+
+        _ = MessageBox(IntPtr.Zero, $"Usage scope set to '{settings.UsageScope}'.", "CreditMeter", 0);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the organization login used for org-scoped usage.
+    /// Usage: CreditMeter.exe --set-org &lt;org&gt;
+    /// Saves and exits — does not start the tray icon.
+    /// </summary>
+    private static bool TryHandleSetOrgCommand(string[] args)
+    {
+        string? org = GetArgValue(args, "--set-org");
+        if (org is null)
+        {
+            return false;
+        }
+
+        AppSettings settings = SettingsStore.Load();
+        settings.OrgName = org;
+        SettingsStore.Save(settings);
+
+        _ = MessageBox(IntPtr.Zero, "Organization saved.", "CreditMeter", 0);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the optional per-member username filter applied to org-scoped
+    /// usage. Usage: CreditMeter.exe --set-org-user &lt;username&gt;
+    /// Saves and exits — does not start the tray icon.
+    /// </summary>
+    private static bool TryHandleSetOrgUserCommand(string[] args)
+    {
+        string? orgUser = GetArgValue(args, "--set-org-user");
+        if (orgUser is null)
+        {
+            return false;
+        }
+
+        AppSettings settings = SettingsStore.Load();
+        settings.OrgUserFilter = orgUser;
+        SettingsStore.Save(settings);
+
+        _ = MessageBox(IntPtr.Zero, "Organization user filter saved.", "CreditMeter", 0);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the optional per-member username filter for org-scoped usage,
+    /// reverting to whole-organization usage.
+    /// Usage: CreditMeter.exe --clear-org-user
+    /// Saves and exits — does not start the tray icon.
+    /// </summary>
+    private static bool TryHandleClearOrgUserCommand(string[] args)
+    {
+        if (Array.IndexOf(args, "--clear-org-user") < 0)
+        {
+            return false;
+        }
+
+        AppSettings settings = SettingsStore.Load();
+        settings.OrgUserFilter = null;
+        SettingsStore.Save(settings);
+
+        _ = MessageBox(IntPtr.Zero, "Organization user filter cleared.", "CreditMeter", 0);
+
+        return true;
+    }
+
+    /// <summary>
     /// Temporary way to smoke-test the GitHub billing API call before the real
     /// polling/UI wiring exists.
-    /// Usage: CreditMeter.exe --test-api [--username &lt;github-username&gt;] [--debug-api]
+    /// Usage: CreditMeter.exe --test-api [--username &lt;github-username&gt;] [--org &lt;org&gt;] [--debug-api]
     /// Requires a PAT already saved via --set-pat. Falls back to the saved
-    /// GitHubUsername setting if --username isn't passed. Pass --debug-api to
+    /// GitHubUsername/OrgName settings if --username/--org aren't passed. In
+    /// "org" scope, --username (or the saved OrgUserFilter) narrows usage to
+    /// one org member instead of the whole org. Pass --debug-api to
     /// also print the sanitized request URL, HTTP status, and a response body
     /// snippet — never the PAT. Does not start the tray icon.
     /// </summary>
@@ -479,7 +675,9 @@ internal static class Program
         }
 
         var client = new GitHubApiClient();
-        GitHubSpendResult result = client.GetCurrentMonthNetSpendDetailedAsync(inputs.Username!, inputs.Pat!).GetAwaiter().GetResult();
+        GitHubSpendResult result = inputs.UsageScope == "org"
+            ? client.GetCurrentMonthOrgSpendDetailedAsync(inputs.OrgName!, inputs.Username, inputs.Pat!).GetAwaiter().GetResult()
+            : client.GetCurrentMonthNetSpendDetailedAsync(inputs.Username!, inputs.Pat!).GetAwaiter().GetResult();
 
         // Sanitized diagnostics — request URL, HTTP status, and a truncated
         // response body snippet. Never includes the PAT. Only shown with
@@ -499,7 +697,7 @@ internal static class Program
         }
         else
         {
-            string reason = result.Error ?? "API returned no spend";
+            string reason = NormalizeError(result.Error, inputs.UsageScope) ?? "API returned no spend";
             _ = MessageBox(IntPtr.Zero, $"{diagnostics}API call failed: {reason}", "CreditMeter", 0);
         }
 
@@ -517,20 +715,22 @@ internal static class Program
     /// Builds the tray tooltip text once spend/credits are known, e.g.
     /// "CreditMeter: $2.14 / 214 credits this month" or, with a configured
     /// local monthly limit (only if the user explicitly set one via
-    /// --set-credit-limit), "CreditMeter: $2.14 / 214 of 500 credits".
+    /// --set-credit-limit), "CreditMeter: $2.14 / 214 of 500 credits". When
+    /// <paramref name="scopeDescriptor"/> is set (org scope only), it's
+    /// appended so the tooltip shows whose usage is displayed, e.g.
+    /// "... — ORG this month" or "... — USERNAME via ORG". Null for personal
+    /// scope, leaving the wording exactly as before.
     /// </summary>
-    private static string BuildUsageTooltip(decimal spend, decimal credits, decimal? monthlyLimit)
+    private static string BuildUsageTooltip(decimal spend, decimal credits, decimal? monthlyLimit, string? scopeDescriptor)
     {
         string dollars = "$" + spend.ToString("0.00", CultureInfo.InvariantCulture);
         string creditsStr = FormatCredits(credits);
 
-        if (monthlyLimit is null)
-        {
-            return $"CreditMeter: {dollars} / {creditsStr} credits this month";
-        }
+        string baseText = monthlyLimit is null
+            ? $"CreditMeter: {dollars} / {creditsStr} credits this month"
+            : $"CreditMeter: {dollars} / {creditsStr} of {FormatCredits(monthlyLimit.Value)} credits";
 
-        string limitStr = FormatCredits(monthlyLimit.Value);
-        return $"CreditMeter: {dollars} / {creditsStr} of {limitStr} credits";
+        return scopeDescriptor is null ? baseText : $"{baseText} — {scopeDescriptor}";
     }
 
     /// <summary>

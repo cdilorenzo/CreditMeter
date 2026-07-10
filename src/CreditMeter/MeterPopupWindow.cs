@@ -275,7 +275,9 @@ internal static class MeterPopupWindow
         decimal credits = state.CurrentMonthCredits.Value;
 
         string amount = "$" + spend.ToString("0.00", CultureInfo.InvariantCulture);
-        string subtitleText = $"{Program.FormatCredits(credits)} AI credits burned";
+        string subtitleText = state.ScopeDescriptor is null
+            ? $"{Program.FormatCredits(credits)} AI credits burned"
+            : $"{Program.FormatCredits(credits)} AI credits — {state.ScopeDescriptor}";
 
         if (state.MonthlyCreditLimit is not decimal limit)
         {
